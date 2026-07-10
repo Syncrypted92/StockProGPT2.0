@@ -2,8 +2,7 @@
 ## About The Project
 I've always had a interest in stock and options trading. It can be a risky and volatile endeavor. I wanted to find a way to make the process easier and more profitable. This project aims to automate the analysis and forecasting of stock prices using machine learning techniques and financial indicators. By leveraging historical stock data and options chain information, the project seeks to provide insights into stock behavior and forecast price movements.
 
-Key Componenets
-
+## Key Componenets
 Data Collection: Historical stock price data is retrieved using the Yahoo Finance API (yfinance). Options chain data is obtained for a specified ticker symbol to analyze call and put options.
 
 Data Preprocessing: Missing values are handled by dropping rows with missing data. Various financial indicators are calculated, including Simple Moving Average (SMA), Relative Strength Index (RSI), Exponential Moving Average (EMA), Moving Average Convergence Divergence (MACD), Volume Weighted Average Price (VWAP), Bollinger Bands, Stochastic Oscillator, Average True Range (ATR), On-Balance Volume (OBV), Money Flow Index (MFI), and Chaikin Money Flow (CMF).
@@ -14,7 +13,7 @@ Model Training and Evaluation: The LSTM model is trained using historical stock 
 
 Visualization: Historical and predicted stock prices are visualized using matplotlib to provide a clear understanding of model performance and forecasted trends.
 
-Dataset
+## Dataset
 
 The dataset contains historical stock data for the ticker 'SPY' from the dates chosen to look between. Each row represents daily stock metrics including:
 
@@ -64,10 +63,10 @@ Therefore, the dataset is divided into:
 
 Training data: Contains 80% of the total data, used for training the LSTM model. Validation data: Contains 10% of the total data, used for validating the model during training. Testing data: Contains 10% of the total data, used for evaluating the model's performance on unseen data after training.
 
-Conclusion
+## Conclusion
 This project demonstrates an automated pipeline for stock analysis and forecasting, incorporating both technical indicators and machine learning techniques. By utilizing historical data and options chain information, investors can gain valuable insights into stock behavior and make informed decisions regarding trading strategies.
 
-Future Work
+## Future Work
 
 Adding real time data so the model is continuously learning as market data comes in.
 
