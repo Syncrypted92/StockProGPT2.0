@@ -1,6 +1,4 @@
-# StockProGPT2.0
-Automated stock trading to help acquire financial freedom while you sleep
-StockProGPT: A Data-driven Approach to Predicting Stock Price
+# StockProGPT2.0: A Data-driven Approach to Predicting Stock Price
 About The Project
 I've always had a interest in stock and options trading. It can be a risky and volatile endeavor. I wanted to find a way to make the process easier and more profitable. This project aims to automate the analysis and forecasting of stock prices using machine learning techniques and financial indicators. By leveraging historical stock data and options chain information, the project seeks to provide insights into stock behavior and forecast price movements.
 
