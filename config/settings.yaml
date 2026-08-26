@@ -1,0 +1,306 @@
+# StockPro directional options trading config
+# PAPER=true by default; live requires PAPER=false AND ALLOW_LIVE=true in env
+
+universe:
+  # Mixed universe: liquid cheap-premium names + mega-caps / index ETFs.
+  # Mega-cap premiums are often richer — max_mid_price / notional still cap risk.
+  tickers:
+    # Mega-caps / index ETFs
+    - SPY
+    - QQQ
+    - AAPL
+    - MSFT
+    - GOOGL
+    - AMZN
+    - META
+    - NVDA
+    - TSLA
+    # Sector / international ETFs
+    - IWM
+    - XLF
+    - XLE
+    - XLI
+    - XLU
+    - EEM
+    # Banks / staples-ish
+    - BAC
+    - WFC
+    - KEY
+    - PFE
+    - T
+    # Tech / semis / growth
+    - INTC
+    - AMD
+    - MU
+    - PLTR
+    - SOFI
+    - HOOD
+    - PYPL
+    - UBER
+    # Autos / travel / consumer
+    - F
+    - GM
+    - RIVN
+    - SNAP
+    - NCLH
+    - CCL
+  history_start: "2000-01-01"   # refresh through latest Yahoo session
+  lookback_days: null           # null = use full history from history_start
+  min_price: 5.0
+  min_avg_volume: 1500000
+  min_avg_dollar_volume: 20000000
+  volume_lookback_days: 20
+
+features:
+  forward_horizon_days: 3
+  flat_threshold: 0.008
+  binary_labels: true    # up/down only — system optimize winner
+
+model:
+  artifact_dir: artifacts
+  model_filename: directional_model.joblib
+  meta_filename: model_meta.json
+  train_ratio: 0.7
+  val_ratio: 0.15
+  # remaining is test
+  optimize_on_train: true       # val search over lookback / flat / HGB / news
+  news_sample_boost: 3.0        # up-weight rows with real Tiingo features
+  directional_sample_boost: 1.5 # up-weight non-flat labels
+  probability_threshold: 0.70
+  rank_by_confidence: true
+  max_new_entries_per_scan: 2   # top-N only; keep small while stabilizing
+
+options:
+  # Survivable swing lane (not 1–5 DTE weeklies)
+  min_dte: 7
+  max_dte: 21
+  target_delta_min: 0.30
+  target_delta_max: 0.50
+  # Fallback when Greeks unavailable: OTM % of spot
+  otm_pct_min: 0.01
+  otm_pct_max: 0.08
+  min_open_interest: 100
+  min_option_volume: 10
+  max_spread_pct: 0.15
+  max_mid_price: 5.00   # allow mega-cap OTM contracts up to $5 mid ($500 notional)
+  prefer_mid_limit: true
+
+# Spy-day 0DTE lane (primary focus) — 5m patterns on SPY
+spy_day:
+  enabled: true
+  symbol: SPY
+  bar_interval: 5Min
+  history_days: 180
+  data_source: alpaca
+  bars_path: data/bars/SPY_5m.parquet
+  bars_ext_path: data/bars/SPY_5m_ext.parquet
+  # ORB 0DTE + retest + power hour + AMD short-DTE (paper research lane)
+  patterns:
+    - orb
+    - orb_retest
+    - power_hour
+    - amd
+    # - orb_gap_align   # use INSTEAD of orb (filter), not with it — alone PF~2.1 but n~31
+    # - pdh_pdl_killzone
+    # - vwap_orb_bias   # failed
+    # - ib_failure      # failed
+    # - ote
+  orb_minutes: 30
+  score_threshold: 0.70
+  # Softer HTF: more ORB trades (~1/day) while still blocking hard counter-trend
+  htf_permission:
+    enabled: true
+    skip_4h_counter_trend: true
+    eq_context: none
+    eq_tol_pct: 0.0025
+    eq_max_dist_pct: 0.004
+    eq_min_touches: 2
+  pattern_min_confidence:
+    orb: 0.70
+    orb_retest: 0.74
+    power_hour: 0.72
+    amd: 0.74
+    orb_gap_align: 0.70
+    pdh_pdl_killzone: 0.73
+    vwap_orb_bias: 0.72
+    ib_failure: 0.74
+    ote: 0.78
+    liquidity_sweep: 0.80
+  # OTE detector defaults (independent of ORB / HTF) — used only if "ote" in patterns
+  ote:
+    min_grade: better
+    require_bos: false
+    require_ob: true
+    require_confirmation: true
+    killzone_only: true
+  # AMD short-DTE paper lane (tuned recipe — not 0DTE)
+  amd:
+    enabled: true
+    require_confirm: false
+    apply_htf: true
+    window_start: "10:00"
+    window_end: "12:00"
+    pierce_atr: 0.15
+    skip_friday: false   # WF: Fri skip added 0 signal filter / overfit risk
+    one_per_day: true
+    min_body_frac: 0.35
+    min_dte: 2
+    max_dte: 5
+    target_dte: 3
+    profit_target_pct: 0.35
+    stop_loss_pct: 0.30
+    min_confidence: 0.74
+    # Swing SIGNAL (paper): default remains hard TP unless signal fires -> trail 20% off peak.
+    # Gate i1 = AMD CALL at +35% (more fires). Gate c5 = call + before 11 ET + OR>=15bps.
+    swing_calls_after_tp: true
+    swing_gate: i1
+    swing_arm_pct: 0.35
+    swing_trail_pct: 0.20
+    swing_runner_cap_pct: 1.50
+  # Paper: 3-lot scale-out on every lane (ORB / retest / power hour / AMD).
+  # 0DTE leftover lots still flatten 15:45 ET. Only AMD (~3 DTE) can hold overnight.
+  scale_out:
+    enabled: true
+    qty: 3
+    tp2_pct: 0.60
+    runner_trail_pct: 0.12   # after TP2, trail 12% off runner peak; BE still the floor
+    runner_stop_at_entry: true
+  max_trades_per_day: 3
+  max_open_positions: 2
+  no_new_entries_after_et: "14:30"
+  force_flat_et: "15:45"
+  min_dte: 0
+  max_dte: 0
+  max_mid_price: 3.00
+  min_mid_price: 0.40   # reject penny 0DTE lottery tickets
+  max_notional_per_trade: 1500.0   # 3x AMD up to ~$5 mid
+  max_contracts_per_trade: 3
+  profit_target_pct: 0.30
+  stop_loss_pct: 0.25
+  # Near ATM: slight ITM to ~0.6% OTM (~$4–5 on SPY). Old 1.5% allowed 766 calls.
+  otm_pct_min: -0.003
+  otm_pct_max: 0.006
+  target_delta_min: 0.35
+  target_delta_max: 0.55
+  target_delta: 0.42
+  min_open_interest: 50
+  min_option_volume: 10
+  option_premium_pct_of_spot: 0.002
+  spread_penalty_pct: 0.04
+  backtest_gate_pf: 1.2
+  backtest_gate_min_trades: 40
+
+# Legacy multi-ETF 0DTE (paused — use spy_day instead)
+zerodte:
+  enabled: false
+  tickers:
+    - SPY
+    - QQQ
+    - IWM
+  min_dte: 0
+  max_dte: 1
+  max_mid_price: 3.00
+  max_notional_per_trade: 300.0
+  max_new_entries_per_scan: 1
+  probability_threshold: 0.65
+  profit_target_pct: 0.25
+  stop_loss_pct: 0.30
+  force_flat_et: "15:45"
+  otm_pct_min: 0.001
+  otm_pct_max: 0.015
+
+risk:
+  max_risk_per_trade_pct: 0.01
+  max_notional_per_trade: 500.0   # 1x $5 mid mega-cap contract
+  max_contracts_per_trade: 1
+  max_open_positions: 2
+  max_daily_loss_pct: 0.02
+  max_weekly_loss_pct: 0.05
+  # Expectancy-optimized (system search); cut losers faster than winners
+  profit_target_pct: 0.30           # +30% on premium
+  stop_loss_pct: 0.25               # -25% on premium
+  exit_days_before_expiry: 2
+  # One position per underlying; cooldown after stop-outs
+  one_position_per_underlying: true
+  cooldown_days_after_stop: 3
+  stop_rate_flag_threshold: 0.70    # flag ticker if ≥70% stops in last N
+  stop_rate_lookback_trades: 5
+  dry_run: true
+
+# News: veto bad events + score/rank opportunities (Phase 1 scoring, Phase 2 retrain via news_features.csv)
+news:
+  enabled: true
+  scoring_enabled: true
+  min_combined_score: 0.0
+  news_weight: 0.25
+  skip_news_conflict: true
+  earnings_block_days_before: 2
+  earnings_block_days_after: 1
+  headline_lookback_hours: 48
+  weekend_notes_path: data/journal/weekend_notes.yaml
+  # Train with Tiingo news features (auto when TIINGO_API_KEY set)
+  train_lookback_days: 90          # Tiingo individual history depth
+  train_on_news_window_only: false
+  # Model features: optimize may drop news if it doesn't beat technical-only on val.
+  # Tiingo still used for veto + scan scoring regardless.
+  train_price_lookback_days: null  # null = full history (optimize winner)
+  headline_keywords:
+    - investigation
+    - downgrade
+    - bankruptcy
+    - offering
+    - dilution
+    - fraud
+    - delisting
+    - guidance cut
+    - sued
+    - lawsuit
+    - miss
+    - warning
+    - layoff
+  bullish_keywords:
+    - upgrade
+    - beat
+    - record
+    - partnership
+    - buyback
+    - contract win
+    - approval
+    - breakthrough
+    - surge
+    - outperforms
+    - raises guidance
+    - acquisition
+  gem_keywords:
+    - upgrade
+    - beat
+    - partnership
+    - buyback
+    - contract win
+    - undervalued
+    - breakout
+
+broker:
+  paper: true
+  allow_live: false
+
+journal:
+  directory: data/journal
+  trades_csv: trades.csv
+  decisions_csv: decisions.csv
+  daily_pnl_csv: daily_pnl.csv
+
+backtest:
+  initial_equity: 100000.0
+  spread_penalty_pct: 0.04          # round-trip spread assumption
+  option_premium_pct_of_spot: 0.005  # proxy premium when no OPRA history
+  walk_forward_train_days: 180
+  walk_forward_test_days: 30
+
+paper_gates:
+  min_trading_days: 20
+  max_drawdown_pct: 0.15
+  soft_drawdown_pct: 0.10
+  min_closed_trades: 15
+  target_profit_factor: 1.3
+  target_win_rate: 0.45

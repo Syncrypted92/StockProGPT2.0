@@ -1,0 +1,33 @@
+# Linux cron for StockPro — wall-clock hours are US Eastern.
+# Prefer host timezone America/New_York (install_linux_cron.sh sets it).
+# CRON_TZ alone is kept as a belt-and-suspenders hint; do not rely on it.
+# Do not make this file executable. Must be owned by root.
+# Jobs go through cron_wrap.sh (flock + timeout) so a hung scan cannot block RTH.
+
+SHELL=/bin/bash
+PATH=/usr/local/bin:/usr/bin:/bin
+CRON_TZ=America/New_York
+MAILTO=""
+PYTHONUNBUFFERED=1
+
+# Premarket bar refresh 07:00 ET weekdays
+0 7 * * 1-5 root /opt/stockpro/scripts/cron_wrap.sh refresh 600 scripts/refresh_spy_bars.py >> /var/log/stockpro/refresh.log 2>&1
+
+# Morning swing scan 09:50 ET
+50 9 * * 1-5 root /opt/stockpro/scripts/cron_wrap.sh morning 600 scripts/run_session.py morning --submit >> /var/log/stockpro/morning.log 2>&1
+
+# SPY day scan every 5m 09:35-15:30 ET
+35,40,45,50,55 9 * * 1-5 root /opt/stockpro/scripts/cron_wrap.sh spyday 240 scripts/run_session.py spy-day --submit >> /var/log/stockpro/spyday.log 2>&1
+*/5 10-14 * * 1-5 root /opt/stockpro/scripts/cron_wrap.sh spyday 240 scripts/run_session.py spy-day --submit >> /var/log/stockpro/spyday.log 2>&1
+0,5,10,15,20,25,30 15 * * 1-5 root /opt/stockpro/scripts/cron_wrap.sh spyday 240 scripts/run_session.py spy-day --submit >> /var/log/stockpro/spyday.log 2>&1
+
+# Exits every 1m 09:40-15:40 ET (scans stay 5m)
+40-59 9 * * 1-5 root /opt/stockpro/scripts/cron_wrap.sh exits 50 scripts/run_session.py afternoon --submit >> /var/log/stockpro/exits.log 2>&1
+* 10-14 * * 1-5 root /opt/stockpro/scripts/cron_wrap.sh exits 50 scripts/run_session.py afternoon --submit >> /var/log/stockpro/exits.log 2>&1
+0-40 15 * * 1-5 root /opt/stockpro/scripts/cron_wrap.sh exits 50 scripts/run_session.py afternoon --submit >> /var/log/stockpro/exits.log 2>&1
+
+# EOD grade 16:20 ET
+20 16 * * 1-5 root /opt/stockpro/scripts/cron_wrap.sh eod 300 scripts/run_session.py eod >> /var/log/stockpro/eod.log 2>&1
+
+# Sunday full bar refresh 18:00 ET
+0 18 * * 0 root /opt/stockpro/scripts/cron_wrap.sh refresh 900 scripts/refresh_spy_bars.py --full >> /var/log/stockpro/refresh.log 2>&1

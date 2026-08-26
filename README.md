@@ -1,79 +1,77 @@
-# StockProGPT2.0: A Data-driven Approach to Predicting Stock Price
-## About The Project
-I've always had a interest in stock and options trading. It can be a risky and volatile endeavor. I wanted to find a way to make the process easier and more profitable. This project aims to automate the analysis and forecasting of stock prices using machine learning techniques and financial indicators. By leveraging historical stock data and options chain information, the project seeks to provide insights into stock behavior and forecast price movements.
+# StockProGPT 2.0 — Directional Options + Alpaca
 
-## Key Componenets
-Data Collection: Historical stock price data is retrieved using the Yahoo Finance API (yfinance). Options chain data is obtained for a specified ticker symbol to analyze call and put options.
+Python package for **directional single-leg options** (long calls/puts) with liquidity filters, risk limits, Alpaca paper trading, and a gated path to tiny live size.
 
-Data Preprocessing: Missing values are handled by dropping rows with missing data. Various financial indicators are calculated, including Simple Moving Average (SMA), Relative Strength Index (RSI), Exponential Moving Average (EMA), Moving Average Convergence Divergence (MACD), Volume Weighted Average Price (VWAP), Bollinger Bands, Stochastic Oscillator, Average True Range (ATR), On-Balance Volume (OBV), Money Flow Index (MFI), and Chaikin Money Flow (CMF).
+> The original Jupyter notebook (`StockPredictionProject.ipynb`) is kept for reference. The runnable system lives under `src/stockpro/`.
 
-Time Series Analysis: Augmented Dickey-Fuller (ADF) test is conducted to check for stationarity in the stock price time series data. LSTM (Long Short-Term Memory) neural network model is trained on the preprocessed data for time series forecasting.
+## Quick start
 
-Model Training and Evaluation: The LSTM model is trained using historical stock data with features engineered from financial indicators. The model is evaluated using mean squared error (MSE), mean absolute error (MAE), and R-squared metrics on a test set. Predictions are made for future stock prices using the trained model.
+```bash
+python -m venv .venv
+# Windows
+.venv\Scripts\activate
+pip install -e ".[dev]"
 
-Visualization: Historical and predicted stock prices are visualized using matplotlib to provide a clear understanding of model performance and forecasted trends.
+copy .env.example .env
+# Add Alpaca paper API keys to .env (optional for dry-run)
 
-## Dataset
+python scripts/train.py
+python scripts/smoke_test.py
+python scripts/scan_and_trade.py --dry-run
+python scripts/report.py --backtest
+pytest
+```
 
-The dataset contains historical stock data for the ticker 'SPY' from the dates chosen to look between. Each row represents daily stock metrics including:
+## Pipeline
 
-Date
+1. **Universe filter** — min price, volume, dollar volume  
+2. **Features** — technical indicators → directional model (gradient boosting)  
+3. **Signal** — bullish → long call, bearish → long put, else flat  
+4. **Contract picker** — DTE, OI, volume, bid-ask spread, delta/OTM band  
+5. **Risk** — tiny notional, max positions, daily/weekly loss halt, kill switch  
+6. **Broker** — Alpaca paper by default; live only if `PAPER=false` and `ALLOW_LIVE=true`
 
-Open
+## Config
 
-High
+- [`config/settings.yaml`](config/settings.yaml) — tickers, filters, risk, backtest  
+- [`.env.example`](.env.example) — `ALPACA_API_KEY`, `ALPACA_SECRET_KEY`, `PAPER`, `ALLOW_LIVE`, `TRADING_HALTED`
 
-Low
+## Paper trading (tomorrow)
 
-Close
+```bash
+.\.venv\Scripts\activate
 
-Adjusted Close
+# 1) Confirm Alpaca paper + options chain
+python scripts/smoke_test.py
 
-Volume
+# 2) Preview signals/orders — no submits
+python scripts/scan_and_trade.py --dry-run
 
-Simple Moving Average (SMA)
+# 3) During market hours: submit paper entries
+python scripts/scan_and_trade.py --submit
 
-Relative Strength Index (RSI)
+# 4) Check / exit open positions (stops, targets, time)
+python scripts/manage_positions.py --dry-run
+python scripts/manage_positions.py --submit
+```
 
-Exponential Moving Average (EMA)
+Keep `PAPER=true` and `ALLOW_LIVE=false` in `.env`. Kill switch: `TRADING_HALTED=true`.
 
-MACD Histogram
+## Paper trading plan
 
-Volume Weighted Average Price (VWAP)
+Full day-by-day playbook, test length, and pass/fail gates:
 
-Upper Bollinger Band (Upper BB)
+→ **[docs/PAPER_TRADING_PLAN.md](docs/PAPER_TRADING_PLAN.md)**
 
-Lower Bollinger Band (Lower BB)
+End of each session:
 
-Stochastic Oscillator
+```bash
+python scripts/daily_grade.py
+python scripts/daily_grade.py --summary
+```
 
-Average True Range (ATR)
+Reports land in `data/journal/reports/YYYY-MM-DD.md` and `data/journal/daily_grades.csv`.
 
-On-Balance Volume (OBV)
+## Disclaimer
 
-Money Flow Index (MFI)
-
-Chaikin Money Flow (CMF)
-
-Data Split for Training and Testing:
-
-The data is split into features (X) and the target variable (y), where 'Close' is used as the target variable. The dataset is then split into training, validation, and testing sets using a train-test split ratio of 80-10-10. The training set comprises 80% of the data, the validation set comprises 10%, and the testing set comprises the remaining 10%. Additionally, the LSTM model uses a lookback window of 60 days (n_steps = 60) for training, meaning it considers the past 60 days of stock data to make predictions.
-
-Therefore, the dataset is divided into:
-
-Training data: Contains 80% of the total data, used for training the LSTM model. Validation data: Contains 10% of the total data, used for validating the model during training. Testing data: Contains 10% of the total data, used for evaluating the model's performance on unseen data after training.
-
-## Conclusion
-This project demonstrates an automated pipeline for stock analysis and forecasting, incorporating both technical indicators and machine learning techniques. By utilizing historical data and options chain information, investors can gain valuable insights into stock behavior and make informed decisions regarding trading strategies.
-
-## Future Work
-
-Adding real time data so the model is continuously learning as market data comes in.
-
-Incorporating sentiment analysis from news articles or social media data for additional insights.
-
-Implementing ensemble methods or alternative machine learning algorithms for comparison.
-
-Building a web interface for easy access and visualization of analysis results.
-
-Overall, the project offers a robust framework for automated stock analysis and forecasting, empowering investors with tools to navigate the dynamic financial markets.
+No model here has a proven edge. Paper validates plumbing and discipline, not profitability. Options can expire worthless; hard daily loss limits are mandatory for live.

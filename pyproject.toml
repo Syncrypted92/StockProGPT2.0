@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "stockpro"
+version = "0.2.0"
+description = "Directional single-leg options trading system with Alpaca paper/live support"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "alpaca-py>=0.33.0",
+  "numpy>=1.24",
+  "pandas>=2.0",
+  "pyyaml>=6.0",
+  "python-dotenv>=1.0",
+  "scikit-learn>=1.3",
+  "yfinance>=0.2.40",
+  "joblib>=1.3",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
