@@ -20,7 +20,7 @@ from stockpro.options import (
     select_contract,
     synthetic_candidates_for_backtest,
 )
-from stockpro.risk import RiskManager, underlying_from_option_symbol
+from stockpro.risk import RiskManager, classify_spy_option_books, underlying_from_option_symbol
 from stockpro.spy_day.session import load_spy_day_config, session_allows_entry
 
 ET = ZoneInfo("America/New_York")
@@ -31,15 +31,9 @@ STALE_BARS_MIN = 12.0
 
 def _option_dte(symbol: str, today: date | None = None) -> int | None:
     """OCC-style expiry YYMMDD embedded in option symbol → calendar DTE."""
-    m = re.search(r"(\d{6})[CP]\d{8}$", symbol)
-    if not m:
-        return None
-    yy, mm, dd = m.group(1)[:2], m.group(1)[2:4], m.group(1)[4:6]
-    try:
-        exp = date(2000 + int(yy), int(mm), int(dd))
-    except ValueError:
-        return None
-    return (exp - (today or date.today())).days
+    from stockpro.risk import option_dte
+
+    return option_dte(symbol, today)
 
 
 def _enrich_quotes(broker: AlpacaBroker, candidates: list) -> None:
@@ -230,6 +224,46 @@ def run_spy_day_scan(*, dry_run: bool = True, submit: bool = False, refresh: boo
             details=sig.reason,
         )
         summary["action"] = "skip_position"
+        return summary
+
+    books = classify_spy_option_books(
+        spy_opt_positions,
+        spy=cfg.symbol.upper(),
+        amd_min_dte=cfg.amd.min_dte,
+        amd_max_dte=cfg.amd.max_dte,
+    )
+    # Block ORB retest stacking on same-side 0DTE (was causing 6-lot doubles).
+    if sig.pattern == "orb_retest" and sig.side in books["0dte"]:
+        journal.log_decision(
+            ticker=cfg.symbol,
+            action="skip",
+            reason="retest_same_side_open",
+            confidence=sig.confidence,
+            details=f"already long 0DTE {sig.side}",
+        )
+        summary["action"] = "skip_retest_stack"
+        return summary
+    # Block AMD vs opposing (or any) 0DTE book — no call+put fights.
+    if sig.pattern == "amd" and books["0dte"]:
+        journal.log_decision(
+            ticker=cfg.symbol,
+            action="skip",
+            reason="amd_blocked_by_0dte",
+            confidence=sig.confidence,
+            details=f"0dte_open={sorted(books['0dte'])}",
+        )
+        summary["action"] = "skip_amd_vs_0dte"
+        return summary
+    # Block new 0DTE if AMD already open (one book policy + no opposing).
+    if sig.pattern in {"orb", "orb_retest", "power_hour"} and books["amd"]:
+        journal.log_decision(
+            ticker=cfg.symbol,
+            action="skip",
+            reason="0dte_blocked_by_amd",
+            confidence=sig.confidence,
+            details=f"amd_open={sorted(books['amd'])}",
+        )
+        summary["action"] = "skip_0dte_vs_amd"
         return summary
 
     # AMD is short-DTE only; skip Fri already in detector. Extra guards.

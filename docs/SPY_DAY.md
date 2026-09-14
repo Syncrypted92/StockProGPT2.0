@@ -2,12 +2,12 @@
 
 **Live paper**
 - **ORB** — first 30m range break; skip 4H counter-trend; **0DTE**; TP 30% / SL 25%; force flat 15:45 ET
-- **ORB retest** — pullback to OR after the break, continuation (0DTE)
+- **ORB retest** — pullback to OR after the break, continuation (0DTE). **Blocked** if same-side 0DTE already open.
 - **Power hour** — 14:00–14:25 continuation of day/ORB bias (0DTE)
-- **AMD** — OR sweep reclaim fade; **~3 DTE (2–5)**, not 0DTE; reclaim + HTF; 10:00–12:00; TP 35% / SL 30%; overnight OK (no same-day forced flat). All weekdays (no Friday skip).
-  - **Scale-out (paper, live):** **3 contracts on every lane**. Lot 1 closes at coded TP (30% 0DTE / 35% AMD). Lot 2 runs to **+60%** (original SL still applies). Lot 3 runner: after TP2, **trail 12% off peak**; if it never trails, **SL to entry**. Exits poll **every 1m**. 0DTE leftover lots flatten **15:45 ET**. Only **AMD (~3 DTE)** can hold overnight. Replaces AMD I1 trail while `scale_out.enabled`.
+- **AMD** — OR sweep reclaim fade; **~3 DTE (2–5)**; reclaim + HTF; 10:00–12:00; TP **25%** / SL 30%. **Hard flat 15:35 ET every day** (no overnight until proven). Blocked if any 0DTE book is open (and vice versa).
+  - **Scale-out (paper, live):** **3 contracts** on every lane. Lot 1 closes at coded TP (30% 0DTE / 25% AMD). Lot 2 runs to **+45%** (original SL still applies). Lot 3 runner: after TP2, **trail 12% off peak**; if it never trails, **SL to entry**. Exits poll **every 1m through 15:50 ET**. Replaces AMD I1 trail while `scale_out.enabled`.
 
-Max **3** entries / day, **2** open SPY option books (e.g. 0DTE ORB + short-DTE AMD).
+Max **3** entries / day, **1** open SPY option book (no ORB+AMD / call+put stacking).
 
 **Caveats (AMD)** — option-premium *proxy* in research, n≈40, still thin. Paper path uses real Alpaca quotes. Keep AMD off 0DTE ORB economics. NQ/MNQ futures vehicle looked stronger in-sample but **not available on Alpaca paper** — do not enable here.
 

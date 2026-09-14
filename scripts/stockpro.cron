@@ -21,10 +21,10 @@ PYTHONUNBUFFERED=1
 */5 10-14 * * 1-5 root /opt/stockpro/scripts/cron_wrap.sh spyday 240 scripts/run_session.py spy-day --submit >> /var/log/stockpro/spyday.log 2>&1
 0,5,10,15,20,25,30 15 * * 1-5 root /opt/stockpro/scripts/cron_wrap.sh spyday 240 scripts/run_session.py spy-day --submit >> /var/log/stockpro/spyday.log 2>&1
 
-# Exits every 1m 09:40-15:40 ET (scans stay 5m)
+# Exits every 1m 09:40-15:50 ET (must cover AMD 15:35 + 0DTE 15:45 flats)
 40-59 9 * * 1-5 root /opt/stockpro/scripts/cron_wrap.sh exits 50 scripts/run_session.py afternoon --submit >> /var/log/stockpro/exits.log 2>&1
 * 10-14 * * 1-5 root /opt/stockpro/scripts/cron_wrap.sh exits 50 scripts/run_session.py afternoon --submit >> /var/log/stockpro/exits.log 2>&1
-0-40 15 * * 1-5 root /opt/stockpro/scripts/cron_wrap.sh exits 50 scripts/run_session.py afternoon --submit >> /var/log/stockpro/exits.log 2>&1
+0-50 15 * * 1-5 root /opt/stockpro/scripts/cron_wrap.sh exits 50 scripts/run_session.py afternoon --submit >> /var/log/stockpro/exits.log 2>&1
 
 # EOD grade 16:20 ET
 20 16 * * 1-5 root /opt/stockpro/scripts/cron_wrap.sh eod 300 scripts/run_session.py eod >> /var/log/stockpro/eod.log 2>&1

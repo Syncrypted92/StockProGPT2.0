@@ -37,13 +37,13 @@ class SpyDayBacktestResult:
 class ScaleOutConfig:
     """Scale-out: bank lot 1 at TP1; remaining lots target tp2 and/or BE.
 
-    qty=3 (change 1): lot1 TP1, lot2 +60% with original SL, lot3 runner SL→entry.
-    qty=2: lot1 TP1, lot2 +60% and SL→entry after TP1.
+    qty=3 (live default): lot1 TP1, lot2 +45% with original SL, lot3 runner trails after TP2.
+    qty=2: lot1 TP1, lot2 +45% and SL→entry after TP1.
     """
 
     qty: int = 3
     tp1_pct: float | None = None  # None = use coded 0DTE/AMD TP
-    tp2_pct: float = 0.60
+    tp2_pct: float = 0.45
     tp3_pct: float | None = None  # None = no hard TP on runner
     runner_trail_pct: float | None = None  # after TP2, trail this far off runner peak
     runner_stop_at_entry: bool = True
@@ -260,12 +260,16 @@ def simulate_scale_out(
     spread_penalty_pct: float,
     scale: ScaleOutConfig | None = None,
     tp_unlock_idx: int | None = None,
+    amd_flat_if_no_tp1: bool = False,
+    amd_force_flat: bool = False,
 ) -> tuple[float, str, int, list[dict[str, Any]]]:
     """Scale-out on the 5m premium path.
 
     Before TP1 all lots share the original SL / time stop. After TP1:
     - qty=2: remaining lot targets tp2; SL moves to entry if runner_stop_at_entry
     - qty=3: lot 2 targets tp2 with original SL; lot 3 runner SL→entry
+    amd_force_flat: short-DTE always flats at force_flat same day (no overnight).
+    amd_flat_if_no_tp1: short-DTE flats at force_flat only before TP1.
     """
     scale = scale or ScaleOutConfig()
     n = max(1, int(scale.qty))
@@ -317,6 +321,13 @@ def simulate_scale_out(
 
     for j, prem, ret, time_exit in steps:
         last_j = j
+        ts = closes.index[j]
+        same_day_flat = (
+            short_dte
+            and ts.date() == entry_ts.date()
+            and _bar_clock(ts) >= force_flat
+            and (amd_force_flat or (amd_flat_if_no_tp1 and not armed))
+        )
         if not armed:
             tp_ok = tp_unlock_idx is None or j >= tp_unlock_idx
             if tp_ok and ret >= tp1:
@@ -326,6 +337,10 @@ def simulate_scale_out(
                 for lot in list(open_lots):
                     close_lot(lot, prem, "stop_loss", j, ret)
                 break
+            elif same_day_flat:
+                for lot in list(open_lots):
+                    close_lot(lot, prem, "session_flat", j, ret)
+                break
             elif time_exit:
                 for lot in list(open_lots):
                     close_lot(lot, prem, time_exit, j, ret)
@@ -334,6 +349,10 @@ def simulate_scale_out(
                 continue
 
         if armed and open_lots:
+            if same_day_flat:
+                for lot in list(open_lots):
+                    close_lot(lot, prem, "session_flat", j, ret)
+                break
             peak_ret = max(peak_ret, ret)
             tp2_still_open = bool(open_lots & tp2_lots)
             for lot in list(open_lots):
@@ -420,6 +439,19 @@ def run_spy_day_backtest(
 
     flat_parts = cfg.force_flat_et.split(":")
     force_flat = time(int(flat_parts[0]), int(flat_parts[1]) if len(flat_parts) > 1 else 0)
+    amd_force_raw = cfg.amd.force_flat_et
+    amd_no_tp1_raw = cfg.amd.flat_if_no_tp1_et
+    amd_force_flat = bool(amd_force_raw)
+    amd_flat_if_no_tp1 = (not amd_force_flat) and bool(amd_no_tp1_raw)
+    amd_flat_clock = amd_force_raw or amd_no_tp1_raw
+    if amd_flat_clock:
+        amd_flat_parts = str(amd_flat_clock).split(":")
+        amd_force_flat_time = time(
+            int(amd_flat_parts[0]),
+            int(amd_flat_parts[1]) if len(amd_flat_parts) > 1 else 0,
+        )
+    else:
+        amd_force_flat_time = force_flat
     late_parts = cfg.no_new_entries_after_et.split(":")
     late = time(int(late_parts[0]), int(late_parts[1]) if len(late_parts) > 1 else 0)
 
@@ -493,10 +525,12 @@ def run_spy_day_backtest(
                 profit_target_pct=tp_pct,
                 stop_loss_pct=sl_pct,
                 short_dte=is_amd,
-                force_flat=force_flat,
+                force_flat=amd_force_flat_time if is_amd else force_flat,
                 spread_penalty_pct=cfg.spread_penalty_pct,
                 scale=so,
                 tp_unlock_idx=unlock,
+                amd_flat_if_no_tp1=is_amd and amd_flat_if_no_tp1,
+                amd_force_flat=is_amd and amd_force_flat,
             )
             exit_prem = float(np.mean([lg["exit"] for lg in legs])) if legs else entry
         elif is_amd:

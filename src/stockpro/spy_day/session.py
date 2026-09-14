@@ -29,15 +29,19 @@ class AmdLaneConfig:
     min_dte: int = 2
     max_dte: int = 5
     target_dte: int = 3
-    profit_target_pct: float = 0.35
+    profit_target_pct: float = 0.25
     stop_loss_pct: float = 0.30
     min_confidence: float = 0.74
     # Paper test: after call hits arm_pct, trail instead of hard TP (puts keep hard TP)
     swing_calls_after_tp: bool = True
     swing_gate: str = "i1"  # i1 = call@arm | c5 = call+morning+OR ext
-    swing_arm_pct: float = 0.35
+    swing_arm_pct: float = 0.25
     swing_trail_pct: float = 0.20
     swing_runner_cap_pct: float = 1.50
+    # Hard flat ALL AMD same day (no overnight). Prefer force_flat_et over flat_if_no_tp1_et.
+    force_flat_et: str | None = "15:35"
+    # Legacy: flat only if TP1 never hit. Ignored when force_flat_et is set.
+    flat_if_no_tp1_et: str | None = None
 
     def detector_dict(self) -> dict[str, Any]:
         return {
@@ -67,14 +71,24 @@ class AmdLaneConfig:
             min_dte=int(raw.get("min_dte", 2)),
             max_dte=int(raw.get("max_dte", 5)),
             target_dte=int(raw.get("target_dte", 3)),
-            profit_target_pct=float(raw.get("profit_target_pct", 0.35)),
+            profit_target_pct=float(raw.get("profit_target_pct", 0.25)),
             stop_loss_pct=float(raw.get("stop_loss_pct", 0.30)),
             min_confidence=float(raw.get("min_confidence", 0.74)),
             swing_calls_after_tp=bool(raw.get("swing_calls_after_tp", True)),
             swing_gate=str(raw.get("swing_gate", "i1")).strip().lower() or "i1",
-            swing_arm_pct=float(raw.get("swing_arm_pct", raw.get("profit_target_pct", 0.35))),
+            swing_arm_pct=float(raw.get("swing_arm_pct", raw.get("profit_target_pct", 0.25))),
             swing_trail_pct=float(raw.get("swing_trail_pct", 0.20)),
             swing_runner_cap_pct=float(raw.get("swing_runner_cap_pct", 1.50)),
+            force_flat_et=(
+                None
+                if raw.get("force_flat_et") in (None, "", False)
+                else str(raw.get("force_flat_et", "15:35"))
+            ),
+            flat_if_no_tp1_et=(
+                None
+                if raw.get("flat_if_no_tp1_et") in (None, "", False)
+                else str(raw.get("flat_if_no_tp1_et"))
+            ),
         )
 
 
@@ -83,12 +97,12 @@ class ScaleOutConfig:
     """Live paper scale-out: bank 1 at TP1, remaining to tp2 / runner.
 
     qty_by_pattern overrides qty (e.g. orb=2, amd=3, power_hour=3).
-    0DTE still force-flats 15:45 — no overnight swing except AMD short-DTE.
+    0DTE force-flats 15:45. AMD force-flats 15:35 (no overnight until proven).
     """
 
     enabled: bool = False
     qty: int = 3
-    tp2_pct: float = 0.60
+    tp2_pct: float = 0.45
     runner_trail_pct: float | None = 0.12
     runner_stop_at_entry: bool = True
     qty_by_pattern: dict[str, int] = field(default_factory=dict)
@@ -120,7 +134,7 @@ class ScaleOutConfig:
         return cls(
             enabled=bool(raw.get("enabled", False)),
             qty=int(raw.get("qty", 3)),
-            tp2_pct=float(raw.get("tp2_pct", 0.60)),
+            tp2_pct=float(raw.get("tp2_pct", 0.45)),
             runner_trail_pct=trail,
             runner_stop_at_entry=bool(raw.get("runner_stop_at_entry", True)),
             qty_by_pattern=qbp,

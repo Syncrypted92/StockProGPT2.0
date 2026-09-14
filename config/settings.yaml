@@ -147,26 +147,27 @@ spy_day:
     min_dte: 2
     max_dte: 5
     target_dte: 3
-    profit_target_pct: 0.35
+    profit_target_pct: 0.25   # was 35%; live peaks often ~20% then fade
     stop_loss_pct: 0.30
+    force_flat_et: "15:35"    # hard flat ALL AMD same day (no overnight until proven)
     min_confidence: 0.74
     # Swing SIGNAL (paper): default remains hard TP unless signal fires -> trail 20% off peak.
-    # Gate i1 = AMD CALL at +35% (more fires). Gate c5 = call + before 11 ET + OR>=15bps.
+    # Gate i1 = AMD CALL at arm. Gate c5 = call + before 11 ET + OR>=15bps.
     swing_calls_after_tp: true
     swing_gate: i1
-    swing_arm_pct: 0.35
+    swing_arm_pct: 0.25
     swing_trail_pct: 0.20
     swing_runner_cap_pct: 1.50
-  # Paper: 3-lot scale-out on every lane (ORB / retest / power hour / AMD).
-  # 0DTE leftover lots still flatten 15:45 ET. Only AMD (~3 DTE) can hold overnight.
+  # Paper: 3-lot scale-out on every lane.
+  # 0DTE leftover lots flatten 15:45 ET. AMD flats 15:35 ET (no overnight).
   scale_out:
     enabled: true
     qty: 3
-    tp2_pct: 0.60
+    tp2_pct: 0.45
     runner_trail_pct: 0.12   # after TP2, trail 12% off runner peak; BE still the floor
     runner_stop_at_entry: true
   max_trades_per_day: 3
-  max_open_positions: 2
+  max_open_positions: 1       # one SPY option book at a time (no ORB+AMD / call+put)
   no_new_entries_after_et: "14:30"
   force_flat_et: "15:45"
   min_dte: 0

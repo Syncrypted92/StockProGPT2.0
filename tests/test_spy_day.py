@@ -101,6 +101,126 @@ def test_scale_out_three_legs_on_stop():
     assert "stop_loss" in reason
 
 
+def test_amd_flat_if_no_tp1_same_day():
+    from datetime import time as dtime
+
+    from stockpro.spy_day.backtest import ScaleOutConfig, simulate_scale_out
+
+    idx = pd.date_range("2026-01-05 10:00", periods=80, freq="5min", tz="America/New_York")
+    # Sideways — never hits 35% TP1; should flat at 15:45 not hold overnight.
+    closes = pd.Series([500.0 + (i % 3) * 0.05 for i in range(len(idx))], index=idx)
+    _, reason, _, legs = simulate_scale_out(
+        closes,
+        idx[0],
+        2.00,
+        500.0,
+        1,
+        profit_target_pct=0.35,
+        stop_loss_pct=0.30,
+        short_dte=True,
+        force_flat=dtime(15, 45),
+        spread_penalty_pct=0.0,
+        scale=ScaleOutConfig(qty=3),
+        amd_flat_if_no_tp1=True,
+    )
+    assert len(legs) == 3
+    assert all(lg["exit_reason"] == "session_flat" for lg in legs)
+    assert "session_flat" in reason
+
+
+def test_amd_force_flat_even_after_tp1():
+    from datetime import time as dtime
+
+    from stockpro.spy_day.backtest import ScaleOutConfig, simulate_scale_out
+
+    idx = pd.date_range("2026-01-05 10:00", periods=80, freq="5min", tz="America/New_York")
+    # Rally early for TP1, then hold through afternoon — force flat still fires.
+    spot = []
+    for i in range(len(idx)):
+        if i < 6:
+            spot.append(500.0 + i * 0.8)
+        else:
+            spot.append(504.0)
+    closes = pd.Series(spot, index=idx)
+    _, reason, _, legs = simulate_scale_out(
+        closes,
+        idx[0],
+        2.00,
+        500.0,
+        1,
+        profit_target_pct=0.25,
+        stop_loss_pct=0.30,
+        short_dte=True,
+        force_flat=dtime(15, 35),
+        spread_penalty_pct=0.0,
+        scale=ScaleOutConfig(qty=2),
+        amd_force_flat=True,
+    )
+    assert any(lg["exit_reason"] == "profit_target" for lg in legs)
+    assert any(lg["exit_reason"] == "session_flat" for lg in legs)
+    assert "session_flat" in reason
+
+
+def test_amd_holds_overnight_after_tp1():
+    from datetime import time as dtime
+
+    from stockpro.spy_day.backtest import ScaleOutConfig, simulate_scale_out
+
+    idx = pd.date_range("2026-01-05 10:00", periods=160, freq="5min", tz="America/New_York")
+    # Rally early for TP1, then fade next session — legacy no-tp1 flat allows overnight after TP1.
+    spot = []
+    for i in range(len(idx)):
+        if i < 6:
+            spot.append(500.0 + i * 0.8)
+        elif idx[i].date() == idx[0].date():
+            spot.append(504.0)
+        else:
+            spot.append(503.0 - (i - 80) * 0.01)
+    closes = pd.Series(spot, index=idx)
+    _, reason, _, legs = simulate_scale_out(
+        closes,
+        idx[0],
+        2.00,
+        500.0,
+        1,
+        profit_target_pct=0.35,
+        stop_loss_pct=0.30,
+        short_dte=True,
+        force_flat=dtime(15, 45),
+        spread_penalty_pct=0.0,
+        scale=ScaleOutConfig(qty=3),
+        amd_flat_if_no_tp1=True,
+    )
+    assert any(lg["exit_reason"] == "profit_target" for lg in legs)
+    assert not all(lg["exit_reason"] == "session_flat" for lg in legs)
+
+
+def test_classify_spy_books_and_retest_guard():
+    from datetime import date
+
+    from stockpro.risk import classify_spy_option_books
+
+    books = classify_spy_option_books(
+        [{"symbol": "SPY260914C00760000", "qty": 2}],
+        spy="SPY",
+        amd_min_dte=2,
+        amd_max_dte=5,
+        today=date(2026, 9, 14),
+    )
+    assert books["0dte"] == {"call"}
+    assert books["amd"] == set()
+
+    books = classify_spy_option_books(
+        [{"symbol": "SPY260917P00760000", "qty": 2}],
+        spy="SPY",
+        amd_min_dte=2,
+        amd_max_dte=5,
+        today=date(2026, 9, 14),
+    )
+    assert books["amd"] == {"put"}
+    assert books["0dte"] == set()
+
+
 def test_scale_out_two_lots_on_stop():
     from datetime import time as dtime
 

@@ -128,16 +128,28 @@ def run_manage(dry_run: bool = True) -> dict:
     amd_lane_on = bool(amd_raw.get("enabled", False)) and "amd" in amd_patterns
     amd_min_dte = int(amd_raw.get("min_dte", 2))
     amd_max_dte = int(amd_raw.get("max_dte", 5))
-    amd_tp = float(amd_raw.get("profit_target_pct", 0.35))
+    amd_tp = float(amd_raw.get("profit_target_pct", 0.25))
     amd_sl = float(amd_raw.get("stop_loss_pct", 0.30))
     amd_swing_calls = bool(amd_raw.get("swing_calls_after_tp", False))
     amd_swing_gate = str(amd_raw.get("swing_gate", "i1")).strip().lower() or "i1"
     amd_swing_arm = float(amd_raw.get("swing_arm_pct", amd_tp))
     amd_swing_trail = float(amd_raw.get("swing_trail_pct", 0.20))
     amd_swing_cap = float(amd_raw.get("swing_runner_cap_pct", 1.50))
+    # Hard AMD same-day flat (preferred). Legacy: flat only if TP1 never banked.
+    amd_force_raw = amd_raw.get("force_flat_et")
+    amd_no_tp1_raw = amd_raw.get("flat_if_no_tp1_et")
+    if amd_force_raw not in (None, "", False):
+        amd_flat_et = str(amd_force_raw)
+        amd_flat_always = True
+    elif amd_no_tp1_raw not in (None, "", False):
+        amd_flat_et = str(amd_no_tp1_raw)
+        amd_flat_always = False
+    else:
+        amd_flat_et = None
+        amd_flat_always = False
     scale_raw = spy_day.get("scale_out") if isinstance(spy_day.get("scale_out"), dict) else {}
     scale_on = spy_day_enabled and bool(scale_raw.get("enabled", False))
-    scale_tp2 = float(scale_raw.get("tp2_pct", 0.60))
+    scale_tp2 = float(scale_raw.get("tp2_pct", 0.45))
     scale_be = bool(scale_raw.get("runner_stop_at_entry", True))
     trail_raw = scale_raw.get("runner_trail_pct", 0.12)
     scale_trail = None if trail_raw in (None, "", False) else float(trail_raw)
@@ -162,6 +174,11 @@ def run_manage(dry_run: bool = True) -> dict:
     now_et = datetime.now(ET)
     flat_h, flat_m = [int(x) for x in zd_flat_et.split(":")[:2]]
     past_0dte_flat = (now_et.hour, now_et.minute) >= (flat_h, flat_m)
+    if amd_flat_et:
+        amd_flat_h, amd_flat_m = [int(x) for x in amd_flat_et.split(":")[:2]]
+        past_amd_flat = (now_et.hour, now_et.minute) >= (amd_flat_h, amd_flat_m)
+    else:
+        past_amd_flat = False
 
     swing_state = _load_swing_state()
     scale_state = _load_scale_state()
@@ -232,14 +249,16 @@ def run_manage(dry_run: bool = True) -> dict:
         if use_scale:
             tp1 = amd_tp if is_amd_lane else zd_tp
             sl = amd_sl if is_amd_lane else zd_sl
+            st = ScaleOutState.from_dict(scale_state.get(symbol), qty=qty)
+            # Recover TP1 from open qty if state was lost; never infer TP2 from qty
+            # (pre-TP2 breakeven cut also leaves 1 lot open).
+            if qty <= st.original_qty - 1:
+                st.tp1_done = True
             time_flat = bool(is_0dte and (not is_amd_lane) and past_0dte_flat)
             if is_amd_lane and dte <= 0:
                 time_flat = True
-            st = ScaleOutState.from_dict(scale_state.get(symbol), qty=qty)
-            if qty <= st.original_qty - 1:
-                st.tp1_done = True
-            if qty <= st.original_qty - 2:
-                st.tp2_done = True
+            if is_amd_lane and past_amd_flat and (amd_flat_always or not st.tp1_done):
+                time_flat = True
             close_qty, reason, st = next_scale_out_action(
                 qty,
                 ret,

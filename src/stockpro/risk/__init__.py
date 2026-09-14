@@ -34,6 +34,51 @@ def option_right(symbol: str) -> str:
     return "call" if m.group(1) == "C" else "put"
 
 
+def option_dte(symbol: str, today: date | None = None) -> int | None:
+    """Calendar DTE from OCC YYMMDD embedded in option symbol."""
+    m = re.search(r"(\d{6})[CP]\d{8}$", str(symbol or "").upper())
+    if not m:
+        return None
+    yy, mm, dd = m.group(1)[:2], m.group(1)[2:4], m.group(1)[4:6]
+    try:
+        exp = date(2000 + int(yy), int(mm), int(dd))
+    except ValueError:
+        return None
+    return (exp - (today or date.today())).days
+
+
+def classify_spy_option_books(
+    positions: list[dict[str, Any]],
+    *,
+    spy: str = "SPY",
+    amd_min_dte: int = 2,
+    amd_max_dte: int = 5,
+    today: date | None = None,
+) -> dict[str, set[str]]:
+    """Open option books by lane → set of rights (call/put)."""
+    out: dict[str, set[str]] = {"0dte": set(), "amd": set(), "any": set()}
+    spy = str(spy).upper()
+    as_of = today or date.today()
+    for p in positions:
+        sym = str(p.get("symbol") or "")
+        if len(sym) < 15:
+            continue
+        if underlying_from_option_symbol(sym) != spy:
+            continue
+        right = option_right(sym)
+        if right not in {"call", "put"}:
+            continue
+        out["any"].add(right)
+        dte = option_dte(sym, as_of)
+        if dte is None:
+            continue
+        if dte == 0:
+            out["0dte"].add(right)
+        elif amd_min_dte <= dte <= amd_max_dte or dte == 1:
+            out["amd"].add(right)
+    return out
+
+
 def amd_swing_signal(
     *,
     right: str,
@@ -200,7 +245,7 @@ def next_scale_out_action(
     if ret <= -stop_loss_pct:
         return qty, "stop_loss", st
 
-    if st.tp2_done:
+    if st.tp2_done and st.peak_ret >= tp2_pct - 1e-12:
         st.peak_ret = max(st.peak_ret, ret)
         trail = float(runner_trail_pct or 0.0)
         if trail > 0 and (st.peak_ret - ret) >= trail - 1e-12:

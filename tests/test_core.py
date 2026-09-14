@@ -311,6 +311,49 @@ def test_scale_out_actions():
     assert q == 1 and r == "runner_trail"
 
 
+def test_scale_out_no_runner_trail_before_tp2():
+    from stockpro.risk import ScaleOutState, next_scale_out_action
+
+    # Friday ORB put path: TP1, pre-TP2 breakeven cut, 1 lot left underwater.
+    st = ScaleOutState(original_qty=3, tp1_done=True, be_done=True)
+    q, r, _ = next_scale_out_action(
+        1,
+        -0.172,
+        tp1_pct=0.30,
+        tp2_pct=0.60,
+        stop_loss_pct=0.25,
+        state=st,
+        runner_trail_pct=0.12,
+    )
+    assert q == 0 and r == ""
+
+    # Stale qty inference must not arm trail (tp2_done set but peak never reached TP2).
+    st_bad = ScaleOutState(
+        original_qty=3, tp1_done=True, tp2_done=True, be_done=True, peak_ret=0.0
+    )
+    q, r, _ = next_scale_out_action(
+        1,
+        -0.172,
+        tp1_pct=0.30,
+        tp2_pct=0.60,
+        stop_loss_pct=0.25,
+        state=st_bad,
+        runner_trail_pct=0.12,
+    )
+    assert q == 0 and r == ""
+
+    q, r, _ = next_scale_out_action(
+        1,
+        -0.26,
+        tp1_pct=0.30,
+        tp2_pct=0.60,
+        stop_loss_pct=0.25,
+        state=st,
+        runner_trail_pct=0.12,
+    )
+    assert q == 1 and r == "stop_loss"
+
+
 def test_scale_out_runner_trail_in_sim():
     from datetime import time as dtime
 
